@@ -49,7 +49,7 @@ def process_chat(inquiry: ChatInquiry):
         Greet warmly, answer pricing or availability questions using the rate card, and collect lead info (Name, Phone, Address, Issue). Return your final response in valid JSON format.
         """
 
-        # 3. Fast direct HTTP REST payload to Gemini Flash
+        # 3. Fast direct HTTP REST payload to Gemini Flash with expanded timeout
         api_key = os.environ.get("GEMINI_API_KEY")
         if not api_key:
             raise HTTPException(status_code=500, detail="GEMINI_API_KEY environment variable is not set on the server.")
@@ -73,7 +73,8 @@ def process_chat(inquiry: ChatInquiry):
             method="POST"
         )
         
-        with urllib.request.urlopen(req, timeout=15) as response:
+        # Expanded timeout to 30 seconds to allow cloud routing completion
+        with urllib.request.urlopen(req, timeout=30) as response:
             res_body = json.loads(response.read().decode("utf-8"))
             raw_text = res_body["candidates"][0]["content"]["parts"][0]["text"].strip()
             
