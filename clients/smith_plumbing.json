@@ -1,0 +1,20 @@
+{
+  "client_id": "smith_plumbing",
+  "business_info": {
+    "business_name": "Smith & Son Plumbing",
+    "industry": "Plumbing & Emergency Repairs",
+    "phone": "(555) 019-8833",
+    "address": "742 Evergreen Terrace",
+    "operating_hours": "Mon-Fri 8:00 AM - 5:00 PM"
+  },
+  "rate_card": {
+    "diagnostic_fee": 85.00,
+    "hourly_labor_rate": 125.00,
+    "standard_parts": {
+      "P-Trap Kit": 35.00,
+      "Standard Garbage Disposal Replacement": 250.00,
+      "Water Heater Anode Rod": 150.00,
+      "Angle Stop Valve Replacement": 75.00
+    }
+  }
+}
