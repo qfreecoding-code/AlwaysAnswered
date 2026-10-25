@@ -19,7 +19,9 @@ app.add_middleware(
 class ChatInquiry(BaseModel):
     client_id: str
     message: str
-
+@app.get("/")
+def read_root():
+    return {"status": "AlwaysAnswered Micro Engine is online!"}
 @app.post("/api/chat")
 def process_chat(inquiry: ChatInquiry):
     # 1. Load client profile JSON
