@@ -44,7 +44,7 @@ def process_chat(inquiry: ChatInquiry):
 
     # 3. Direct, lightweight HTTP REST payload (No heavy SDK overhead)
     api_key = os.environ.get("GEMINI_API_KEY")
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key={api_key}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
     
     payload = {
         "contents": [{"parts": [{"text": inquiry.message}]}],
