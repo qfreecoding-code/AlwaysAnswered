@@ -6,7 +6,7 @@ from pydantic import BaseModel
 import urllib.request
 import urllib.error
 
-app = FastAPI(title="AlwaysAnswered Neural Engine", redirect_slashes=False)
+app = FastAPI(title="AlwaysAnswered Micro Engine", redirect_slashes=False)
 
 app.add_middleware(
     CORSMiddleware,
@@ -22,11 +22,11 @@ class ChatInquiry(BaseModel):
 
 @app.get("/")
 def read_root():
-    return {"status": "AlwaysAnswered Neural Engine is online!"}
+    return {"status": "AlwaysAnswered Micro Engine is online!"}
 
 @app.post("/api/chat")
 def process_chat(inquiry: ChatInquiry):
-    # 1. Load client profile JSON dynamically from your repository's clients/ folder
+    # 1. Load client profile JSON
     profile_path = os.path.join("clients", f"{inquiry.client_id}.json")
     if not os.path.exists(profile_path):
         raise HTTPException(status_code=404, detail="Client profile not found")
@@ -36,7 +36,7 @@ def process_chat(inquiry: ChatInquiry):
         
     biz = client_profile['business_info']
     
-    # 2. Rich System Prompt instructing the neural net to speak like a professional human receptionist
+    # 2. Build system instructions for the AI receptionist
     system_instruction = f"""
     You are an expert, friendly AI receptionist for {biz['business_name']}, a professional {biz['industry']} company.
     Operating Hours: {biz['operating_hours']}
@@ -44,24 +44,23 @@ def process_chat(inquiry: ChatInquiry):
     Rate Card & Pricing Rules:
     {json.dumps(client_profile['rate_card'], indent=2)}
     
-    Your job:
-    - Greet the customer warmly and naturally (no robotic pre-written templates).
-    - Answer questions about availability or pricing accurately using the rate card.
-    - Politely guide them to provide their Name, Phone Number, Service Address, and Issue Details so a technician can be dispatched.
-    - Return your final response in clean JSON format with keys: "reply_message", "intent_detected", and "lead_collected".
+    Greet warmly, answer pricing or availability questions using the rate card, and collect lead info (Name, Phone, Address, Issue). Return your final response in valid JSON format.
     """
 
-    # 3. Neural inference request routed to a high-speed cloud neural endpoint
+    # 3. Fast direct HTTP REST payload to Gemini Flash (using active gemini-3.8-flash endpoint)
     api_key = os.environ.get("GEMINI_API_KEY")
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+    if not api_key:
+        raise HTTPException(status_code=500, detail="GEMINI_API_KEY environment variable is not set on the server.")
+        
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key={api_key}"
     
     payload = {
         "contents": [{"parts": [{"text": inquiry.message}]}],
         "system_instruction": {"parts": [{"text": system_instruction}]},
         "generationConfig": {
             "responseMimeType": "application/json",
-            "temperature": 0.3,  # Slight temperature for natural, flowing responses
-            "maxOutputTokens": 400
+            "temperature": 0.2,
+            "maxOutputTokens": 300
         }
     }
     
@@ -77,7 +76,7 @@ def process_chat(inquiry: ChatInquiry):
             res_body = json.loads(response.read().decode("utf-8"))
             raw_text = res_body["candidates"][0]["content"]["parts"][0]["text"].strip()
             
-            # Clean markdown wrappers if returned by the neural net
+            # Clean markdown code blocks if present
             if raw_text.startswith("```json"):
                 raw_text = raw_text[7:]
             elif raw_text.startswith("```"):
