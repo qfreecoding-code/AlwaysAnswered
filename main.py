@@ -3,10 +3,10 @@ import json
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import urllib.request
-import urllib.error
+from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
+import torch
 
-app = FastAPI(title="AlwaysAnswered Micro Engine")
+app = FastAPI(title="AlwaysAnswered Neural Engine", redirect_slashes=False)
 
 app.add_middleware(
     CORSMiddleware,
@@ -16,17 +16,30 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Load a true lightweight neural net directly into server memory on startup
+# Using a fast, highly capable small model (e.g., Qwen2.5-1.5B-Instruct or Phi-3-mini)
+MODEL_NAME = "Qwen/Qwen2.5-1.5B-Instruct"
+
+print("Loading onboard neural net into memory...")
+tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+model = AutoModelForCausalLM.from_pretrained(
+    MODEL_NAME,
+    torch_dtype=torch.float32, # CPU-compatible precision for Render free tier
+    low_cpu_mem_usage=True
+)
+generator = pipeline("text-generation", model=model, tokenizer=tokenizer)
+print("Neural net loaded successfully!")
+
 class ChatInquiry(BaseModel):
     client_id: str
     message: str
 
 @app.get("/")
 def read_root():
-    return {"status": "AlwaysAnswered Micro Engine is online!"}
+    return {"status": "AlwaysAnswered Neural Engine is online and running local weights!"}
 
 @app.post("/api/chat")
 def process_chat(inquiry: ChatInquiry):
-    # 1. Load client profile JSON
     profile_path = os.path.join("clients", f"{inquiry.client_id}.json")
     if not os.path.exists(profile_path):
         raise HTTPException(status_code=404, detail="Client profile not found")
@@ -34,59 +47,42 @@ def process_chat(inquiry: ChatInquiry):
     with open(profile_path, "r") as f:
         client_profile = json.load(f)
         
-    # 2. Build system instructions
-    system_instruction = f"""
-    You are an AI receptionist for {client_profile['business_info']['business_name']}.
-    Industry: {client_profile['business_info']['industry']}
-    Operating Hours: {client_profile['business_info']['operating_hours']}
-    
-    Rate Card & Pricing:
-    {json.dumps(client_profile['rate_card'], indent=2)}
-    
-    Greet warmly, answer pricing/availability using the rate card, and collect lead info (Name, Phone, Address, Issue). Return valid JSON.
-    """
+    system_prompt = f"""You are an AI receptionist for {client_profile['business_info']['business_name']}.
+Industry: {client_profile['business_info']['industry']}.
+Hours: {client_profile['business_info']['operating_hours']}.
+Rate Card: {json.dumps(client_profile['rate_card'])}.
+Greet the customer naturally, answer their question using the rate card, and ask for their contact details and address. Speak like a real human trade receptionist."""
 
-    # 3. Direct, lightweight HTTP REST payload (No heavy SDK overhead)
-    api_key = os.environ.get("GEMINI_API_KEY")
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+    # Format prompt for instruction-tuned neural model
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": inquiry.message}
+    ]
     
-    payload = {
-        "contents": [{"parts": [{"text": inquiry.message}]}],
-        "system_instruction": {"parts": [{"text": system_instruction}]},
-        "generationConfig": {
-            "responseMimeType": "application/json",
-            "temperature": 0.1,
-            "maxOutputTokens": 300
-        }
-    }
+    formatted_prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
     
-    req = urllib.request.Request(
-        url,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
-        method="POST"
+    # Generate true neural net tokens
+    outputs = generator(
+        formatted_prompt,
+        max_new_tokens=150,
+        temperature=0.7,
+        do_sample=True,
+        pad_token_id=tokenizer.eos_token_id
     )
     
-    try:
-        with urllib.request.urlopen(req, timeout=15) as response:
-            res_body = json.loads(response.read().decode("utf-8"))
-            raw_text = res_body["candidates"][0]["content"]["parts"][0]["text"].strip()
-            
-            # Clean markdown code blocks if present
-            if raw_text.startswith("```json"):
-                raw_text = raw_text[7:]
-            elif raw_text.startswith("```"):
-                raw_text = raw_text[3:]
-            if raw_text.endswith("```"):
-                raw_text = raw_text[:-3]
-                
-            return json.loads(raw_text.strip())
-            
-    except urllib.error.HTTPError as e:
-        error_message = e.read().decode("utf-8")
-        raise HTTPException(status_code=e.code, detail=error_message)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    generated_text = outputs[0]['generated_text']
+    # Extract the assistant's reply after the prompt tokens
+    response_reply = generated_text[len(formatted_prompt):].strip()
+
+    return {
+        "business_name": client_profile['business_info']['business_name'],
+        "ai_engine": MODEL_NAME,
+        "reply_message": response_reply,
+        "lead_info_collected": {
+            "customer_message": inquiry.message,
+            "status": "processed_by_local_neural_net"
+        }
+    }
 
 if __name__ == "__main__":
     import uvicorn
